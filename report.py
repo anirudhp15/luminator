@@ -5,7 +5,7 @@ import numpy as np
 import io
 import re
 
-colT1, colT2 = st.columns([4, 6])
+colT1, colT2 = st.columns([3, 6])
 with colT2:
     st.title(":violet[Luminator]")
 
