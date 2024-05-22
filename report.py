@@ -5,11 +5,12 @@ import numpy as np
 import io
 import re
 
-
-st.sidebar.title(":violet[Luminator]")
+colT1, colT2 = st.columns([4, 6])
+with colT2:
+    st.title(":violet[Luminator]")
 
 # Create a file uploader
-with st.sidebar.popover(
+with st.popover(
     "Upload Files", help="Upload your streaming report files", use_container_width=True
 ):
     uploaded_files = st.file_uploader(
