@@ -1,9 +1,7 @@
 import streamlit as st
-import datetime as dt
 import pandas as pd
 import numpy as np
 import io
-import re
 
 colT1, colT2 = st.columns([3, 6])
 with colT2:
@@ -16,16 +14,26 @@ with st.popover(
     uploaded_files = st.file_uploader(
         "Upload your streaming report files",
         accept_multiple_files=True,
-        type=["csv"],
+        type=["csv", "xlsx"],
     )
 
 
 def process_file(file):
     # Determine the file type and read data accordingly
     if file.type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
-        df = pd.DataFrame(
-            pd.read_excel(io=file, skiprows=6)  # Assuming header starts at row 7
-        )
+        try:
+            # Prompt user to select the sheet if there are multiple sheets
+            sheet_names = pd.ExcelFile(file).sheet_names
+            if len(sheet_names) > 1:
+                sheet_name = st.selectbox(f"Select sheet from {file.name}", sheet_names)
+            else:
+                sheet_name = sheet_names[0]
+            df = pd.read_excel(
+                io=file, sheet_name=sheet_name, skiprows=6
+            )  # Assuming header starts at row 7
+        except Exception as e:
+            st.error(f"Error reading Excel file ({file.name}): {e}")
+            return None
     else:
         df = pd.read_csv(
             io.BytesIO(file.read()), skiprows=6
@@ -72,7 +80,8 @@ all_data = []
 for uploaded_file in uploaded_files:
     if uploaded_file is not None:
         df = process_file(uploaded_file)
-        all_data.append(df)
+        if df is not None:
+            all_data.append(df)
 
 # Aggregate data
 if all_data:
