@@ -139,9 +139,10 @@ if non_corresponding_files:
         f"The following files have older date ranges and are excluded from the aggregated output: :violet[{', '.join(non_corresponding_files)}]"
     )
 
-    cols1, cols2 = st.columns([3, 6])
+    cols1, cols2 = st.columns([2, 3])
+    container = cols1.container()
     # Toggle switch to include older date ranges
-    include_older_files = cols2.checkbox("INCLUDE OLDER FILES", False)
+    include_older_files = container.toggle("INCLUDE OLDER FILES", False)
 else:
     include_older_files = False
 
@@ -263,10 +264,19 @@ if filtered_data:
     output.seek(0)
 
     # Create the download button
-    st.download_button(
-        label="Download data as Excel",
-        data=output,
-        file_name="data.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
-    )
+    if non_corresponding_files:
+        cols2.download_button(
+            label="Download data as Excel",
+            data=output,
+            file_name="data.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+    else:
+        st.download_button(
+            label="Download data as Excel",
+            data=output,
+            file_name="data.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
