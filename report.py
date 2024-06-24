@@ -233,3 +233,40 @@ if filtered_data:
         hide_index=True,
         column_config={"Stream Counts": st.column_config.AreaChartColumn()},
     )
+
+    # Remove the last column of the DataFrame
+    result_df = result_df.iloc[:, :-1]
+
+    # Convert the DataFrame to an Excel file
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        result_df.to_excel(writer, index=False)
+    # Load the workbook and adjust the column widths
+    output.seek(0)
+    book = openpyxl.load_workbook(output)
+    sheet = book.active
+    for column in sheet.columns:
+        max_length = 0
+        column = [cell for cell in column]
+        for cell in column:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(cell.value)
+            except:
+                pass
+        adjusted_width = max_length + 2
+        sheet.column_dimensions[column[0].column_letter].width = adjusted_width
+
+    # Save the workbook to a new BytesIO object
+    output = io.BytesIO()
+    book.save(output)
+    output.seek(0)
+
+    # Create the download button
+    st.download_button(
+        label="Download data as Excel",
+        data=output,
+        file_name="data.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+    )
