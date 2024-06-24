@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import openpyxl
+import csv
 import io
 
 colT1, colT2 = st.columns([3, 6])
@@ -18,19 +20,35 @@ with st.popover(
     )
 
 
+def excel_to_csv(file):
+    # Load the Excel workbook
+    wb = openpyxl.load_workbook(file, read_only=True)
+    # Select the second sheet
+    sheet = wb.worksheets[1]
+
+    # Create a CSV writer object
+    output = io.StringIO()
+    csv_writer = csv.writer(output)
+
+    # Write the rows from the sheet to the CSV
+    for row in sheet.iter_rows(values_only=True):
+        csv_writer.writerow(row)
+
+    # Seek to the beginning of the StringIO object
+    output.seek(0)
+
+    return output
+
+
 def process_file(file):
     # Determine the file type and read data accordingly
     if file.type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
         try:
-            # Prompt user to select the sheet if there are multiple sheets
-            sheet_names = pd.ExcelFile(file).sheet_names
-            if len(sheet_names) > 1:
-                sheet_name = st.selectbox(f"Select sheet from {file.name}", sheet_names)
-            else:
-                sheet_name = sheet_names[0]
-            df = pd.read_excel(
-                io=file, sheet_name=sheet_name, skiprows=6
-            )  # Assuming header starts at row 7
+            # Convert Excel to CSV using openpyxl and csv
+            csv_file = excel_to_csv(file)
+            # Read the CSV data
+            df = pd.read_csv(csv_file, skiprows=7)  # Assuming header starts at row 7
+            df.drop(columns=df.columns[0], inplace=True)
         except Exception as e:
             st.error(f"Error reading Excel file ({file.name}): {e}")
             return None
@@ -38,6 +56,15 @@ def process_file(file):
         df = pd.read_csv(
             io.BytesIO(file.read()), skiprows=6
         )  # Assuming header starts at row 7
+
+    # Filter out rows where the second column contains "All Airplay Formats Selected"
+    df = df[~df.iloc[:, 1].str.contains("All Airplay Formats Selected")]
+
+    if "Range" not in df.columns:
+        st.error(
+            f"Column 'Range' not found in {file.name}. Please check the file format."
+        )
+        return None
 
     # Collect datetime of latest date in rolling date range column
     latest_date = df["Range"][0]
@@ -77,15 +104,53 @@ def process_file(file):
 
 # Process each uploaded file
 all_data = []
+date_ranges = []
 for uploaded_file in uploaded_files:
     if uploaded_file is not None:
         df = process_file(uploaded_file)
         if df is not None:
             all_data.append(df)
+            # Store the date ranges
+            date_ranges.append(
+                {
+                    "file_name": uploaded_file.name,
+                    "start_date": pd.to_datetime(df["Rolling Date Range"].min()),
+                    "end_date": pd.to_datetime(df["Rolling Date Range"].max()),
+                    "dataframe": df,
+                }
+            )
+
+# Identify the most recent date range
+if date_ranges:
+    most_recent_end_date = max([dr["end_date"] for dr in date_ranges])
+
+# Check for non-corresponding date ranges
+non_corresponding_files = []
+filtered_data = []
+for dr in date_ranges:
+    if dr["end_date"] < most_recent_end_date:
+        non_corresponding_files.append(dr["file_name"])
+    else:
+        filtered_data.append(dr["dataframe"])
+
+# Display an alert if there are non-corresponding date ranges
+if non_corresponding_files:
+    st.warning(
+        f"The following files have older date ranges and are excluded from the aggregated output: :violet[{', '.join(non_corresponding_files)}]"
+    )
+
+    cols1, cols2 = st.columns([3, 6])
+    # Toggle switch to include older date ranges
+    include_older_files = cols2.checkbox("INCLUDE OLDER FILES", False)
+else:
+    include_older_files = False
+
+if include_older_files:
+    filtered_data = [dr["dataframe"] for dr in date_ranges]
 
 # Aggregate data
-if all_data:
-    aggregated_data = pd.concat(all_data)
+if filtered_data:
+    aggregated_data = pd.concat(filtered_data)
 
     aggregated_data["Rolling Date Range"] = pd.to_datetime(
         aggregated_data["Rolling Date Range"]
@@ -153,13 +218,13 @@ if all_data:
     period_min = aggregated_data["Rolling Date Range"].min().strftime("%A, %d %b %Y")
     period_max = aggregated_data["Rolling Date Range"].max().strftime("%A, %d %b %Y")
 
-    if len(all_data) == 1:
+    if len(filtered_data) == 1:
         st.markdown(
-            f"***Report for :violet[{len(all_data)}] file ({period_min} - {period_max})***"
+            f"***Report for :violet[{len(filtered_data)}] file ({period_min} - {period_max})***"
         )
-    elif len(all_data) > 1:
+    elif len(filtered_data) > 1:
         st.markdown(
-            f"***Report for :violet[{len(all_data)}] files ({period_min} - {period_max})***"
+            f"***Report for :violet[{len(filtered_data)}] files ({period_min} - {period_max})***"
         )
 
     st.dataframe(
